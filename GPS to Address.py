@@ -1,16 +1,10 @@
+# Original script created with Gemini.
+# Updated with Claude.ai to support another format for lat/long
+# changed the order of the pull downs from long/lat to lat/long, as that's the more natural way to enter them.
 # Jacques Boucher
 # jjrboucher@gmail.com
 #
-# Written using Google Gemini
-#
-# Date: 3 February 2025
-# Description: Script will prompt you for an Excel sheet via a tkinter menu.
-# The script will then have you select the longitude and latitude columns via a pull down in the tkinter menu.
-#
-# It will then process the Excel file and add a new column to it containing the resolved addresses.
-#
-# The script will also display a status message indicating which row is being processed.
-#
+# Last updated 16 May 2025
 
 import pandas as pd
 from geopy.geocoders import Nominatim
@@ -26,7 +20,7 @@ def geocode_address(latitude, longitude, retries=3):
 
     for attempt in range(retries):
         try:
-            location = geolocator.reverse((latitude, longitude), timeout=10, language="en")  # Add language="en"
+            location = geolocator.reverse((latitude, longitude), timeout=10, language="en")
             if location:
                 return location.address
             else:
@@ -48,22 +42,24 @@ def geocode_address(latitude, longitude, retries=3):
 def convert_coordinates(coord):
     """Converts coordinates from various formats to decimal degrees."""
     if isinstance(coord, str):
-        match = re.match(r"(\d+)\s?(°|deg)?\s*(\d+)'?\s*(\d+(?:\.\d+)?)[\"\"]?\s*([NSEW]?)", coord, re.IGNORECASE)
-        if match:
-            degrees = float(match.group(1))
-            minutes = float(match.group(3))
-            seconds = float(match.group(4)) if match.group(4) else 0.0
-            direction = match.group(5) or ''
+        # Try to directly convert simple decimal format (including negative values)
+        try:
+            return float(coord)
+        except ValueError:
+            # If direct conversion fails, try the more complex format
+            match = re.match(r"(\-?\d+)\s?(°|deg)?\s*(\d+)'?\s*(\d+(?:\.\d+)?)[\"\"]?\s*([NSEW]?)", coord, re.IGNORECASE)
+            if match:
+                degrees = float(match.group(1))
+                minutes = float(match.group(3))
+                seconds = float(match.group(4)) if match.group(4) else 0.0
+                direction = match.group(5) or ''
 
-            decimal_degrees = degrees + (minutes / 60) + (seconds / 3600)
-            if direction.lower() in ('s', 'w'):
-                decimal_degrees *= -1
-            return decimal_degrees
-        else:  # If the regex doesn't match, try decimal
-            try:
-                return float(coord)
-            except ValueError:
-                return None
+                decimal_degrees = abs(degrees) + (minutes / 60) + (seconds / 3600)
+                # Apply negative sign if original degrees were negative or if direction is S/W
+                if degrees < 0 or direction.lower() in ('s', 'w'):
+                    decimal_degrees *= -1
+                return decimal_degrees
+            return None
     elif isinstance(coord, (int, float)):
         return float(coord)
     return None
@@ -89,26 +85,25 @@ def process_file(file_path, lon_col, lat_col):
 
     successful_count = 0
     unsuccessful_count = 0
+    empty_rows_count = 0  # Initialize this variable
 
     for index, row in df.iterrows():
-
         lat_str = str(row[lat_col])  # Convert to string explicitly
         lon_str = str(row[lon_col])  # Convert to string explicitly
-
 
         lat = convert_coordinates(lat_str)  # Convert latitude
         lon = convert_coordinates(lon_str)  # Convert longitude
 
         if lat is None or lon is None:  # Check for invalid coordinate format
             df.loc[index, 'Address'] = "Invalid Coordinates"
-            empty_rows_count += 1
+            unsuccessful_count += 1
             status_label.config(text=f"Processed row: {index + 1} of {total_rows} (Skipped - Invalid Coordinates)")
             root.update_idletasks()
             continue
 
-        if pd.isna(lat) or pd.isna(lon) or not (lat and lon):
+        if pd.isna(lat) or pd.isna(lon) or not (isinstance(lat, (int, float)) and isinstance(lon, (int, float))):
             df.loc[index, 'Address'] = "No Coordinates"
-            empty_rows_count += 1
+            unsuccessful_count += 1
             status_label.config(text=f"Processed row: {index + 1} of {total_rows} (Skipped - No Coordinates)")
             root.update_idletasks()
             continue
@@ -118,10 +113,8 @@ def process_file(file_path, lon_col, lat_col):
 
         if (address == "Address not found" or address == "Geocoding failed" or address == "Error during geocoding" or
                 address == "No Coordinates" or address == "Invalid Coordinates"):
-            empty_rows_count += 1
             unsuccessful_count += 1
         else:
-            empty_rows_count = 0
             successful_count += 1
 
         update_status_label(successful_count, unsuccessful_count, total_rows, index)  # Call the update function
@@ -186,19 +179,19 @@ file_path_entry.grid(row=0, column=1, padx=5, pady=5)
 browse_button = tk.Button(root, text="Browse", command=browse_file)
 browse_button.grid(row=0, column=2, padx=5, pady=5)
 
-lon_col_label = tk.Label(root, text="Longitude Column:")
-lon_col_label.grid(row=1, column=0, padx=5, pady=5, sticky="w")
-
-lon_col_var = tk.StringVar(root)
-lon_col_dropdown = ttk.Combobox(root, textvariable=lon_col_var, state="disabled")
-lon_col_dropdown.grid(row=1, column=1, padx=5, pady=5)
-
 lat_col_label = tk.Label(root, text="Latitude Column:")
-lat_col_label.grid(row=2, column=0, padx=5, pady=5, sticky="w")
+lat_col_label.grid(row=1, column=0, padx=5, pady=5, sticky="w")
 
 lat_col_var = tk.StringVar(root)
 lat_col_dropdown = ttk.Combobox(root, textvariable=lat_col_var, state="disabled")
-lat_col_dropdown.grid(row=2, column=1, padx=5, pady=5)
+lat_col_dropdown.grid(row=1, column=1, padx=5, pady=5)
+
+lon_col_label = tk.Label(root, text="Longitude Column:")
+lon_col_label.grid(row=2, column=0, padx=5, pady=5, sticky="w")
+
+lon_col_var = tk.StringVar(root)
+lon_col_dropdown = ttk.Combobox(root, textvariable=lon_col_var, state="disabled")
+lon_col_dropdown.grid(row=2, column=1, padx=5, pady=5)
 
 process_button = tk.Button(root, text="Start Geocoding", command=start_processing)
 process_button.grid(row=3, column=0, columnspan=3, pady=10)

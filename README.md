@@ -6,5 +6,6 @@ It accepts any of the following three formats (with lat/long in different column
 46.203361 / 17.341428<br>
 46 ° 12' 12.10" N / 17 ° 20' 29.14"<br>
 46 deg 12' 12.10" N / 17 deg 20' 29.14"<br>
+-34.9051 / 138.5629<br>
 <br>
 You execute the script. It will go through and convert each to an address. If it can't convert a value, it will note that. The results will be in a new column called Address.
